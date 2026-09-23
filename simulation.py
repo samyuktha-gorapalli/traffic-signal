@@ -1,5 +1,6 @@
 import random
 from collections import deque
+from fuzzy_controller import fuzzy_decide_green_duration
 
 
 def generate_arrival_times(rate: float, total_duration: float) -> list[float]:
@@ -40,7 +41,6 @@ def run_baseline_simulation(rate_a: float, rate_b: float, total_duration: int, g
         'approach_a': generate_arrival_times(rate_a, total_duration),
         'approach_b': generate_arrival_times(rate_b, total_duration)
     }
-
     queues = {'approach_a': deque(), 'approach_b': deque()}
     arrival_indices = {'approach_a': 0, 'approach_b': 0}
     all_wait_times = {'approach_a': [], 'approach_b': []}
@@ -56,15 +56,13 @@ def run_baseline_simulation(rate_a: float, rate_b: float, total_duration: int, g
         departed_waits, discharge_counter = step(
             t, queues, arrival_schedules, arrival_indices, current_phase, discharge_counter
         )
-
         if departed_waits:
             all_wait_times[current_phase].extend(departed_waits)
 
     return all_wait_times
 
-from fuzzy_controller import fuzzy_decide_green_duration
 
-def run_fuzzy_simulation(rate_a: float, rate_b: float, total_duration: int):
+def run_fuzzy_simulation(rate_a: float, rate_b: float, total_duration: int, rule_table=None):
     arrival_schedules = {
         'approach_a': generate_arrival_times(rate_a, total_duration),
         'approach_b': generate_arrival_times(rate_b, total_duration)
@@ -78,7 +76,7 @@ def run_fuzzy_simulation(rate_a: float, rate_b: float, total_duration: int):
     discharge_counter = 0
     phase_start = 0
     current_green_duration = fuzzy_decide_green_duration(
-        len(queues[current_phase]), len(queues[other_phase])
+        len(queues[current_phase]), len(queues[other_phase]), rule_table
     )
 
     for t in range(total_duration):
@@ -87,7 +85,7 @@ def run_fuzzy_simulation(rate_a: float, rate_b: float, total_duration: int):
             discharge_counter = 0
             phase_start = t
             current_green_duration = fuzzy_decide_green_duration(
-                len(queues[current_phase]), len(queues[other_phase])
+                len(queues[current_phase]), len(queues[other_phase]), rule_table
             )
 
         departed_waits, discharge_counter = step(
