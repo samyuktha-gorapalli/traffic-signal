@@ -17,7 +17,6 @@ def generate_arrival_times(rate: float, total_duration: float) -> list[float]:
 def step(t, queues, arrival_schedules, arrival_indices, current_phase, discharge_counter):
     recorded_wait_times = []
 
-    # 1. Process arrivals occurring during this 1-second window [t, t + 1)
     for approach, schedule in arrival_schedules.items():
         idx = arrival_indices[approach]
         while idx < len(schedule) and t <= schedule[idx] < t + 1:
@@ -25,7 +24,6 @@ def step(t, queues, arrival_schedules, arrival_indices, current_phase, discharge
             idx += 1
         arrival_indices[approach] = idx
 
-    # 2. Process discharge every 3rd second of active green
     discharge_counter += 1
     if discharge_counter % 3 == 0:
         active_queue = queues.get(current_phase)
@@ -43,18 +41,9 @@ def run_baseline_simulation(rate_a: float, rate_b: float, total_duration: int, g
         'approach_b': generate_arrival_times(rate_b, total_duration)
     }
 
-    queues = {
-        'approach_a': deque(),
-        'approach_b': deque()
-    }
-    arrival_indices = {
-        'approach_a': 0,
-        'approach_b': 0
-    }
-    all_wait_times = {
-        'approach_a': [],
-        'approach_b': []
-    }
+    queues = {'approach_a': deque(), 'approach_b': deque()}
+    arrival_indices = {'approach_a': 0, 'approach_b': 0}
+    all_wait_times = {'approach_a': [], 'approach_b': []}
 
     current_phase = 'approach_a'
     discharge_counter = 0
@@ -73,21 +62,38 @@ def run_baseline_simulation(rate_a: float, rate_b: float, total_duration: int, g
 
     return all_wait_times
 
-def trapezoidal_membership(x: float, a: float, b: float, c: float, d: float) -> float:
-    # 1. Flat top / Shoulders get priority so boundary points aren't swallowed
-    if b <= x <= c:
-        return 1.0
-    
-    # 2. Outside the support window (zero membership)
-    if x <= a or x >= d:
-        return 0.0
-    
-    # 3. Rising edge (a < x < b)
-    if a < x < b:
-        return (x - a) / (b - a) if b > a else 1.0
-    
-    # 4. Falling edge (c < x < d)
-    if c < x < d:
-        return (d - x) / (d - c) if d > c else 1.0
-        
-    return 0.0
+from fuzzy_controller import fuzzy_decide_green_duration
+
+def run_fuzzy_simulation(rate_a: float, rate_b: float, total_duration: int):
+    arrival_schedules = {
+        'approach_a': generate_arrival_times(rate_a, total_duration),
+        'approach_b': generate_arrival_times(rate_b, total_duration)
+    }
+    queues = {'approach_a': deque(), 'approach_b': deque()}
+    arrival_indices = {'approach_a': 0, 'approach_b': 0}
+    all_wait_times = {'approach_a': [], 'approach_b': []}
+
+    current_phase = 'approach_a'
+    other_phase = 'approach_b'
+    discharge_counter = 0
+    phase_start = 0
+    current_green_duration = fuzzy_decide_green_duration(
+        len(queues[current_phase]), len(queues[other_phase])
+    )
+
+    for t in range(total_duration):
+        if t - phase_start >= current_green_duration:
+            current_phase, other_phase = other_phase, current_phase
+            discharge_counter = 0
+            phase_start = t
+            current_green_duration = fuzzy_decide_green_duration(
+                len(queues[current_phase]), len(queues[other_phase])
+            )
+
+        departed_waits, discharge_counter = step(
+            t, queues, arrival_schedules, arrival_indices, current_phase, discharge_counter
+        )
+        if departed_waits:
+            all_wait_times[current_phase].extend(departed_waits)
+
+    return all_wait_times
